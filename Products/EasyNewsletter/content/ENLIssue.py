@@ -1,14 +1,10 @@
-import cStringIO
-import formatter
 import urllib
 
-from htmllib import HTMLParser
 from urlparse import urlparse
 from email.MIMEText import MIMEText
 from email.MIMEMultipart import MIMEMultipart
 from email.MIMEImage import MIMEImage
 from email.Header import Header
-#from email import Encoders
 
 from AccessControl import ClassSecurityInfo
 from Products.Archetypes import atapi
@@ -36,7 +32,6 @@ from Products.EasyNewsletter.interfaces import IENLIssue
 from Products.EasyNewsletter.interfaces import IReceiversPostSendingFilter
 from Products.EasyNewsletter.interfaces import ISubscriberSource
 from Products.EasyNewsletter.utils.ENLHTMLParser import ENLHTMLParser
-#from Products.EasyNewsletter.utils.mail import create_html_mail
 from Products.EasyNewsletter.utils import safe_portal_encoding
 from Products.CMFPlone.utils import safe_unicode
 
@@ -266,12 +261,11 @@ class ENLIssue(ATTopic, atapi.BaseContent):
         """ exchange relative URLs and
             return dict with html, plain and images
         """
-        parser_output_zpt = ENLHTMLParser(self)
-        parser_output_zpt.feed(output_html)
-        text = parser_output_zpt.html
-        text_plain = self.create_plaintext_message(text)
-        image_urls = parser_output_zpt.image_urls
-        return dict(html=text, plain=text_plain, images=image_urls)
+        parser = ENLHTMLParser(self)
+        parser.feed(output_html)
+        return dict(html=parser.get_html(),
+                    plain=parser.get_text(),
+                    images=parser.image_urls)
 
     security.declarePublic('send')
     def send(self, recipients=[]):
@@ -376,14 +370,7 @@ class ENLIssue(ATTopic, atapi.BaseContent):
             outer.epilogue = ''
 
             # Attach text part
-            #text_part = MIMEText(personal_text_plain, "plain", charset)
-
-            # Attach html part with images
-            #html_part =  MIMEText(personal_text, "html", charset)
-
-            # Attach text part
-            text_part = MIMEMultipart("related")
-            text_part.attach(MIMEText(personal_text_plain, "plain", charset))
+            text_part = MIMEText(personal_text_plain, "plain", charset)
 
             # Attach html part with images
             html_part = MIMEMultipart("related")
@@ -558,30 +545,6 @@ class ENLIssue(ATTopic, atapi.BaseContent):
                                       IReceiversPostSendingFilter):
             plone_subscribers = subscriber.filter(plone_subscribers)
         return plone_subscribers
-
-    def create_plaintext_message(self, text):
-        """ Create a plain-text-message by parsing the html
-            and attaching links as endnotes
-        """
-        plain_text_maxcols = 72
-        textout = cStringIO.StringIO()
-        formtext = formatter.AbstractFormatter(formatter.DumbWriter(
-                        textout, plain_text_maxcols))
-        parser = HTMLParser(formtext)
-        parser.feed(text)
-        parser.close()
-
-        # append the anchorlist at the bottom of a message
-        # to keep the message readable.
-        counter = 0
-        anchorlist = "\n\n" + ("-" * plain_text_maxcols) + "\n\n"
-        for item in parser.anchorlist:
-            counter += 1
-            anchorlist += "[%d] %s\n" % (counter, item)
-
-        text = textout.getvalue() + anchorlist
-        del textout, formtext, parser, anchorlist
-        return text
 
     def getFiles(self):
         """ Return list of files in subtree """
