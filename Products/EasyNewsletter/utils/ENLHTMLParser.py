@@ -20,6 +20,9 @@ class ENLHTMLParser(HTMLParser.HTMLParser):
         self._is_body = False
         self.image_urls = []
         self.image_number = 0
+        plone_utils = getToolByName(self.context, 'plone_utils')
+        self._encoding = plone_utils.getSiteEncoding()
+        self._base_parts = urlparse.urlparse(context.absolute_url())
 
         HTMLParser.HTMLParser.__init__(self)
 
@@ -55,31 +58,24 @@ class ENLHTMLParser(HTMLParser.HTMLParser):
             self._is_body = True
         self._write_to_html("<%s" % tag)
 
-        for attr in attrs:
-            if attr[0] == "href":
-                try:
-                    # split anchor from url
-                    baseurl, anchor = urlparse.urldefrag(attr[1])
-                    o = self.context.restrictedTraverse(urllib.unquote(baseurl))
-                    if getattr(o, 'absolute_url', None):
-                        url = o.absolute_url()
-                    else:
-                        # maybe we got a view instead of an traversal object:
-                        if getattr(o, 'context', None):
-                            url = o.context.absolute_url()
+        for key, value in attrs:
+            if key == "href":
+                if isinstance(value, unicode):
+                    value = value.encode(self._encoding)
+                if value[0] != '#':
+                    # If we have something else than an anchor make it absolute
+                    parts = urlparse.urlparse(value)
+                    if parts[0] in ['', 'http', 'https']:
+                        absolute_parts = [parts[0] or self._base_parts[0],
+                                          parts[1] or self._base_parts[1]]
+                        if len(parts[2]) and parts[2][0] != '/':
+                            absolute_parts.append(
+                                '/'.join((self._base_parts[2], parts[2])))
                         else:
-                            url = attr[1]
-                    if anchor:
-                        url = '#' + anchor
-                except:
-                    url = attr[1]
-                if isinstance(url, unicode):
-                    plone_utils = getToolByName(self.context, 'plone_utils')
-                    encoding = plone_utils.getSiteEncoding()
-                    url = url.encode(encoding)
-                self._write_to_html(' href="%s"' % url)
-            else:
-                self._write_to_html(' %s="%s"' % (attr))
+                            absolute_parts.append(parts[2])
+                        absolute_parts.extend(parts[3:])
+                        value = urlparse.urlunparse(absolute_parts)
+            self._write_to_html(' %s="%s"' % (key, value))
 
         self._write_to_html(">")
 
@@ -111,17 +107,16 @@ class ENLHTMLParser(HTMLParser.HTMLParser):
         """
         """
         self._write_to_html("<%s" % tag)
-        for attr in attrs:
-            if attr[0] == "src":
-                image_url = urlparse.urlparse(attr[1])
-                if 'http' in attr[1]:
-                    url = attr[1]
-                    self._write_to_html(' src="%s"' % url)
+
+        for key, value in attrs:
+            if key == "src":
+                if 'http' in value:
+                    self._write_to_html(' src="%s"' % value)
                 else:
                     self._write_to_html(' src="cid:image_%s"' % self.image_number)
                     self.image_number += 1
-                    self.image_urls.append(attr[1])
+                    self.image_urls.append(value)
             else:
-                self._write_to_html(' %s="%s"' % (attr))
+                self._write_to_html(' %s="%s"' % (key, value))
 
         self._write_to_html(" />")

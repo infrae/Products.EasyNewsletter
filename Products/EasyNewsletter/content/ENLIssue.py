@@ -257,9 +257,10 @@ class ENLIssue(ATTopic, atapi.BaseContent):
         output_html = safe_portal_encoding(self.out_template_pt.pt_render())
         return output_html
 
-    def _exchange_relative_urls(self, output_html):
-        """ exchange relative URLs and
-            return dict with html, plain and images
+    def _format_text_and_html(self, output_html):
+        """ Exchange relative URLs to absolute ones, replace images
+            URLs, and return dict with html, plain text and images
+            (and their associated IDs).
         """
         parser = ENLHTMLParser(self)
         parser.feed(output_html)
@@ -316,8 +317,8 @@ class ENLIssue(ATTopic, atapi.BaseContent):
         send_error_counter = 0
 
         receivers = self._send_recipients(recipients)
-        output_html = self._render_output_html()
-        rendered_newsletter = self._exchange_relative_urls(output_html)
+        rendered_newsletter = self._format_text_and_html(
+            self._render_output_html())
         text = rendered_newsletter['html']
         text_plain = rendered_newsletter['plain']
         image_urls = rendered_newsletter['images']

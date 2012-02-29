@@ -75,6 +75,19 @@ class Enl_Subscribers_View(BrowserView):
         return subscribers
 
 
+def decode_string(string, encoding):
+    if not isinstance(string, unicode):
+        assert encoding is not None, 'API Error'
+        string = string.decode(encoding)
+    return string.strip()
+
+def decode_list(values, encoding):
+    return map(lambda v: decode_string(v, encoding), values)
+
+def normalize_list(values, encoding):
+    return map(lambda v: v.lower(), decode_list(values, encoding))
+
+
 class UploadCSV(BrowserView):
 
     def __init__(self, context, request):
@@ -91,78 +104,90 @@ class UploadCSV(BrowserView):
 
         context = aq_inner(self.context)
         lang = context.Language()
-        plone_utils = getToolByName(self.context, 'plone_utils')
+        plone_utils = getToolByName(context, 'plone_utils')
         encoding = plone_utils.getSiteEncoding()
-        existing = self.context.objectIds()
-        messages = IStatusMessage(self.request)
+        existing = set(context.objectIds())
         success = []
         fail = []
         data = []
 
+
+        def error(msg):
+            IStatusMessage(self.request).addStatusMessage(msg, type='error')
+            return self.request.response.redirect(
+                context.absolute_url() + '/@@upload_csv')
+
         # Show error if no file was specified
         filename = self.request.form.get('csv_upload', None)
         if not filename:
-            msg = _('No file specified.')
-            IStatusMessage(self.request).addStatusMessage(msg, type='error')
-            return self.request.response.redirect(context.absolute_url() + '/@@upload_csv')
+            return error(_('No file specified.'))
 
-        # Show error if no data has been provided in the file
-        reader = csv.reader(filename)
-        header = reader.next()
-        CSV_HEADER_I18N = [self.context.translate(_(x)) for x in CSV_HEADER]
-        if header != CSV_HEADER_I18N:
-            msg = _('Wrong specification of the CSV file. Please correct it and retry.')
-            IStatusMessage(self.request).addStatusMessage(msg, type='error')
-            return self.request.response.redirect(context.absolute_url() + '/@@upload_csv')
+        # Detect the dialect of the CSV, and load it
+        dialect = csv.Sniffer().sniff(filename.read())
+        filename.seek(0)
+        reader = csv.reader(filename, dialect=dialect)
 
-        for subscriber in reader:
+        # Verify header
+        header = normalize_list(reader.next(), encoding)
+        expected_header = normalize_list(
+            [context.translate(_(x)) for x in CSV_HEADER], None)
+        if header != expected_header:
+            return error(_("CSV file header doesn't match expected one."))
+
+        for index, line in enumerate(reader):
             # Check the length of the line
-            if len(subscriber) != 4:
-                msg = _('The number of items in the line is not correct. \
-                        It should be 4. Check your CSV file.')
+            if len(line) != 4:
+                return error(
+                    _('The number of entries on the line ${line} is not correct.',
+                      mapping=dict(line=index)))
+
+            try:
+                subscriber = decode_list(line, encoding)
+            except UnicodeDecodeError:
+                return error(_('The CSV file is not encoded in ${encoding}.',
+                               mapping=dict(encoding=encoding)))
+
+            salutation = subscriber[0]
+            fullname = subscriber[1]
+            email = subscriber[2]
+            organization = subscriber[3]
+
+            identifier = plone_utils.normalizeString(email)
+            if identifier in existing:
+                msg = _('This email address is already registered.')
                 fail.append(
-                    {'failure': msg})
-            else:
-                salutation = subscriber[0]
-                fullname = subscriber[1]
-                email = subscriber[2]
-                organization = subscriber[3]
-                id = plone_utils.normalizeString(email)
-                if id in existing:
-                    msg = _('This email address is already registered.')
-                    fail.append(
-                        {'salutation': salutation,
-                         'fullname': fullname,
-                         'email': email,
-                         'organization': organization,
-                         'failure': msg})
-                else:
-                    title = email + " - " + fullname
-                    try:
-                        self.context.invokeFactory('ENLSubscriber',
-                            id=id,
-                            title=title,
-                            description="",
-                            language=lang)
-                        sub = context[id]
-                        sub.email = email
-                        sub.fullname = fullname.decode(encoding)
-                        sub.organization = organization.decode(encoding)
-                        sub.salutation = salutation.decode(encoding)
-                        obj = self.context.get(id, None)
-                        obj.reindexObject()
-                        success.append(
-                                {'salutation': salutation,
-                                 'fullname': fullname,
-                                 'email': email,
-                                 'organization': organization})
-                    except Exception, e:
-                        fail.append(
-                            {'salutation': salutation,
-                             'fullname': fullname,
-                             'email': email,
-                             'organization': organization,
-                             'failure': 'An error occured while creating this subscriber: %s' % str(e)})
+                    {'salutation': salutation,
+                     'fullname': fullname,
+                     'email': email,
+                     'organization': organization,
+                     'failure': msg})
+                continue
+            title = u" - ".join((email, fullname))
+            try:
+                context.invokeFactory('ENLSubscriber',
+                    id=identifier,
+                    title=title,
+                    description="",
+                    language=lang)
+                obj = context._getOb(identifier)
+                obj.email = email
+                obj.fullname = fullname
+                obj.organization = organization
+                obj.salutation = salutation
+                obj.reindexObject()
+                existing.add(identifier)
+                success.append(
+                    {'salutation': salutation,
+                     'fullname': fullname,
+                     'email': email,
+                     'organization': organization})
+            except Exception, e:
+                fail.append(
+                    {'salutation': salutation,
+                     'fullname': fullname,
+                     'email': email,
+                     'organization': organization,
+                     'failure': 'An error occured while creating this subscriber: %s' % str(e)})
 
         return {'success': success, 'fail': fail}
 
