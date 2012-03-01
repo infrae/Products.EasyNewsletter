@@ -137,15 +137,18 @@ class UploadCSV(BrowserView):
         for index, line in enumerate(reader):
             # Check the length of the line
             if len(line) != 4:
-                return error(
-                    _('The number of entries on the line ${line} is not correct.',
-                      mapping=dict(line=index)))
+                msg =_('The number of entries on the line ${line} is not correct.',
+                       mapping=dict(line=index))
+                fail.append({'failure': msg})
+                continue
 
             try:
                 subscriber = decode_list(line, encoding)
             except UnicodeDecodeError:
-                return error(_('The CSV file is not encoded in ${encoding}.',
-                               mapping=dict(encoding=encoding)))
+                msg = _('The CSV file is not encoded in ${encoding}.',
+                        mapping=dict(encoding=encoding))
+                fail.append({'failure': msg})
+                continue
 
             salutation = subscriber[0]
             fullname = subscriber[1]

@@ -1,6 +1,7 @@
 from AccessControl import ClassSecurityInfo
 from Products.Archetypes import atapi
 from zope.interface import implements
+from Products.CMFCore.utils import getToolByName
 
 from Products.EasyNewsletter import config
 from Products.EasyNewsletter.interfaces import IENLSubscriber
@@ -74,10 +75,8 @@ class ENLSubscriber(atapi.BaseContent):
     schema = schema
     _at_rename_after_creation = True
 
-    def initializeArchetype(self, **kwargs):
-        """Overwritten hook
-        """
-        atapi.BaseContent.initializeArchetype(self, **kwargs)
+    def generateNewId(self):
+        return getToolByName(self, 'plone_utils').normalizeString(self.email)
 
     def setEmail(self, value):
         """
