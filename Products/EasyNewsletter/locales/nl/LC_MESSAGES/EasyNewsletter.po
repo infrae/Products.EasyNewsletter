@@ -809,3 +809,14 @@ msgstr "Plaats item naar beneden"
 msgid "title_move_item_up"
 msgstr "Plaats item naar boven"
 
+msgid "Duplicate registration."
+msgstr "Dit e-mailadres is reeds geregistreerd."
+
+msgid "This email is not a valid email address."
+msgstr "Dit is geen geldig e-mailadres."
+
+msgid "subscribers"
+msgstr "abonnees"
+
+msgid "Subscribers"
+msgstr "Abonnees"

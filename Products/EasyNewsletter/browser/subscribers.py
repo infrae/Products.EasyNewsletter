@@ -12,6 +12,7 @@ from zope.interface import implements, Interface
 from Products.EasyNewsletter import EasyNewsletterMessageFactory as _
 from Products.EasyNewsletter.config import SALUTATION
 from Products.EasyNewsletter.interfaces import ISubscriberSource
+from Products.validation import validation
 
 
 CSV_HEADER = [_(u"salutation"), _(u"fullname"), _(u"email"), _(u"organization"), ]
@@ -155,7 +156,16 @@ class UploadCSV(BrowserView):
             email = subscriber[2]
             organization = subscriber[3]
 
-            identifier = plone_utils.normalizeString(email)
+            if validation.validate('isEmail', email.encode('utf-8')) != 1:
+                msg = _('This email is not a valid email address.')
+                fail.append(
+                    {'salutation': salutation,
+                     'fullname': fullname,
+                     'email': email,
+                     'organization': organization,
+                     'failure': msg})
+                continue                
+            identifier = plone_utils.normalizeString(email).lower()
             if identifier in existing:
                 msg = _('This email address is already registered.')
                 fail.append(

@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-version = '2.6.1-preview-infrae2'
+version = '2.6.1-preview-infrae3'
 
 setup(name='Products.EasyNewsletter',
     version=version,

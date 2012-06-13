@@ -6,6 +6,27 @@ from Products.CMFCore.utils import getToolByName
 from Products.EasyNewsletter import config
 from Products.EasyNewsletter.interfaces import IENLSubscriber
 from Products.EasyNewsletter import EasyNewsletterMessageFactory as _
+from Products.validation.interfaces import ivalidator
+from Products.validation import validation
+
+
+class NoDuplicateValidator(object):
+    __implements__ = (ivalidator, )
+
+    name = 'noDuplicateContent'
+    title = 'Prevent duplicated content'
+    description = 'Prevent duplicated content'
+
+    def __call__(self, value=None, *args, **kwargs):
+        instance = kwargs.get('instance')
+        if instance is not None:
+            folder = instance.aq_parent
+            identifier = getToolByName(instance, 'plone_utils').normalizeString(value).lower()
+            if folder._getOb(identifier, instance) != instance:
+                return _(u"Duplicate registration.")
+        return 1
+
+validation.register(NoDuplicateValidator())
 
 
 schema = atapi.BaseSchema + atapi.Schema((
@@ -54,10 +75,10 @@ schema = atapi.BaseSchema + atapi.Schema((
 
     atapi.StringField('email',
         required = True,
-        validators = ('isEmail', ),
+        validators = ('isEmail', 'noDuplicateContent'),
         widget = atapi.StringWidget(
             label = _(u'EasyNewsletter_label_email',
-                default=u'Email'),
+                default=u'Emaileuuuh'),
             description = _(u'EasyNewsletter_help_email',
                 default=u''),
             i18n_domain = 'EasyNewsletter',
@@ -76,7 +97,7 @@ class ENLSubscriber(atapi.BaseContent):
     _at_rename_after_creation = True
 
     def generateNewId(self):
-        return getToolByName(self, 'plone_utils').normalizeString(self.email)
+        return getToolByName(self, 'plone_utils').normalizeString(self.email).lower()
 
     def setEmail(self, value):
         """
